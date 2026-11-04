@@ -16,18 +16,18 @@ Social Interaction and Technological Feedback* (2026). It is not tied to any dat
 ## Model
 
 Agents hold a perceived value $v>0$ of an innovation. Per collision (coefficients $a_1,a_2,b,c\ge0$,
-noise $\xi\sim N(0,\gamma b)$):
+noise $\eta\sim N(0,\gamma b)$ ):
 
 | agent | partner | update |
 |---|---|---|
-| non-user | non-user | $v' = v - a_1(v-v_*) - \mu(t)\,b\,(v-Pw(t)) + v\xi$ |
-| non-user | user | $v' = v - a_2(v-v_*) - \mu(t)\,b\,(v-Pw(t)) + v\xi$ |
-| user | anyone | $v' = v - c\,(v-Pr(t)) + v\zeta$ |
+| non-user | non-user | $v' = v - a_1(v-v_*) - \mu(t)\cdot b(v-Pw(t)) + v\eta$ |
+| non-user | user | $v' = v - a_2(v-v_*) - \mu(t)\cdot b(v-Pw(t)) + v\eta$ |
+| user | anyone | $v' = v - c\,(v-Pr(t)) + v\xi$ |
 
 $\mu(t)$ is the media frequency, $w(t)$ the media message, $P(t)$ the price. A non-user with a purchase
 opportunity (rate $\lambda$) adopts if $v>P$. The realised value is logistic in investment,
 
-$$r=\frac{r_\infty}{1+e^{-\nu(I-I_0)}},\qquad I=k_1\!\int_0^t m_1\,ds+k_2\rho+I_{\rm exo}(t),$$
+$$r=\frac{r_\infty}{1+e^{-\nu(I-I_0)}},\qquad I=k_1\int_0^t m_1(s)ds+k_2\rho+I_{\rm exo}(t),$$
 
 with $m_1$ the mean perceived value of non-users, $\rho$ the share of users and $I_{\rm exo}$ an exogenous
 investment path.
