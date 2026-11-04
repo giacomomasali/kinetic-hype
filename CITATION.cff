@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "kinetic-hype: a kinetic model of expectations, adoption and technological performance"
+authors:
+  - family-names: Masali
+    given-names: Giacomo
+    affiliation: "Politecnico di Torino"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+version: 0.1.0
+date-released: "2026-11-17"
+license: MIT
+repository-code: "https://github.com/USERNAME/kinetic-hype"
+keywords:
+  - kinetic theory
+  - Fokker-Planck
+  - innovation diffusion
+  - expectations
+  - DSMC

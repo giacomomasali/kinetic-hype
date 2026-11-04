@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kinetic-hype"
+version = "0.1.0"
+description = "Kinetic model of coupled expectations, adoption and technological performance: mean-field solver and DSMC"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Giacomo Masali" }]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10", "pandas>=2.0", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "jupyter", "nbconvert", "ipykernel"]
+
+[tool.setuptools]
+packages = ["kinetic_hype"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
