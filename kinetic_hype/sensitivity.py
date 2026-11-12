@@ -24,7 +24,7 @@ import numpy as np
 from scipy.stats import qmc
 
 from . import meanfield
-from .analysis import hype_features
+from .analysis import hype_features, largest_fall
 from .model import Params, Signals, gaussian, linear, rise_then_flat
 
 
@@ -61,8 +61,10 @@ FACTORS = (
 NAMES = tuple(f.name for f in FACTORS)
 BASELINE = dict(media_width2=2.0, w0=1.5, r_inf=0.8, k1=0.5, k2=0.5, inv_slope=0.1, gam=0.8,
                 alpha1=10.0, alpha2=15.0, lam=0.8, nu=1.0)
-OUTCOMES = ("pattern", "hype_cycle", "drop", "recovery", "overshoot", "rho_T", "t_peak")
-PATTERNS = {0: "no overshoot", 1: "overshoot, no recovery", 2: "hype cycle"}
+OUTCOMES = ("pattern", "hype_cycle", "ends_above_peak", "drop", "recovery", "overshoot", "max_fall",
+            "rho_T", "t_peak", "r_media_peak")
+MEDIA_PEAK = 2.0          # time at which media attention peaks in every run (centre of the Gaussian bump)
+PATTERNS = {0: "no fall", 1: "fall, no recovery", 2: "hype cycle"}
 
 
 def build(x: dict) -> tuple[Params, Signals]:
@@ -70,7 +72,7 @@ def build(x: dict) -> tuple[Params, Signals]:
     b = 1e-3
     p = Params(a1=x["alpha1"] * b, a2=x["alpha2"] * b, b=b, gam=x["gam"], lam=x["lam"],
                r_inf=x["r_inf"], nu=x["nu"], k1=x["k1"], k2=x["k2"])
-    s = Signals(media=gaussian(2.0, x["media_width2"]),
+    s = Signals(media=gaussian(MEDIA_PEAK, x["media_width2"]),
                 message=rise_then_flat(x["w0"], center=2.0, width2=2.0),
                 investment=linear(x["inv_slope"]))
     return p, s
@@ -79,15 +81,23 @@ def build(x: dict) -> tuple[Params, Signals]:
 def evaluate(x: dict, T: float = 30.0, n_points: int = 601) -> dict:
     """Outcomes of one mean-field run.
 
-    pattern     0: no overshoot (expectations never fall by 0.02 or more after
-                   an interior peak); 1: overshoot without recovery (they fall
-                   and settle, a hype-disappointment curve); 2: hype cycle
-    hype_cycle  1 if pattern == 2 (analysis.HypeFeatures.is_hype_cycle), else 0
-    drop        peak minus following trough of m1
-    recovery    final value minus trough of m1
-    overshoot   peak minus final value of m1
-    rho_T       adoption at T
-    t_peak      time of the peak of m1
+    pattern     classification of m1(t), with min_drop = 0.02 and min_recovery = 0.01:
+                0: no fall (m1 never falls by min_drop or more from any peak after t = 0.1);
+                1: fall without recovery (m1 falls by min_drop or more from its global
+                   peak and settles: a hype-disappointment curve);
+                2: hype cycle (m1 falls by min_drop or more from a peak after t = 0.1 and
+                   then recovers by min_recovery or more). The peak may be the global
+                   maximum (the trough lies below the final level) or a local one that
+                   expectations later surpass (they end above the early peak).
+    hype_cycle       1 if pattern == 2, else 0
+    ends_above_peak  1 if a hype cycle in which expectations later rise above the
+                     peak they fell from, else 0
+    drop        global peak minus following trough of m1
+    recovery    final value minus trough of m1 after the global peak
+    overshoot   global peak minus final value of m1
+    max_fall    largest fall of m1 from any peak after t = 0.1 (analysis.largest_fall)
+    r_media_peak     realised performance r at the media peak (t = MEDIA_PEAK); an outcome of
+                     the run, not an input, since investment depends on expectations
     """
     p, s = build(x)
     try:
@@ -95,11 +105,19 @@ def evaluate(x: dict, T: float = 30.0, n_points: int = 601) -> dict:
     except Exception:  # solver failure: recorded as missing
         return {k: np.nan for k in OUTCOMES}
     f = hype_features(d)
-    cycle = f.is_hype_cycle(t_min=0.1)
-    overshoot = f.t_peak > 0.1 and f.drop >= 0.02
-    pattern = 2 if cycle else (1 if overshoot else 0)
-    return {"pattern": float(pattern), "hype_cycle": float(cycle), "drop": f.drop, "recovery": f.recovery,
-            "overshoot": f.peak - f.final, "rho_T": float(d.rho.iloc[-1]), "t_peak": f.t_peak}
+    loc = largest_fall(d, t_min=0.1)
+    global_fall = f.drop if f.t_peak > 0.1 else 0.0
+    max_fall = max(loc.fall, global_fall) if np.isfinite(loc.fall) else global_fall
+    global_cycle = f.is_hype_cycle(t_min=0.1)
+    fall_no_recovery = f.t_peak > 0.1 and f.drop >= 0.02 and not global_cycle
+    # a fall from a local peak that expectations later surpass: recovery exceeds the fall
+    above = bool(np.isfinite(loc.fall) and loc.fall >= 0.02 and loc.exceeded)
+    cycle = global_cycle or (above and not fall_no_recovery)
+    pattern = 2 if cycle else (1 if fall_no_recovery else 0)
+    return {"pattern": float(pattern), "hype_cycle": float(cycle),
+            "ends_above_peak": float(cycle and not global_cycle), "drop": f.drop, "recovery": f.recovery,
+            "overshoot": f.peak - f.final, "max_fall": float(max_fall), "rho_T": float(d.rho.iloc[-1]),
+            "t_peak": f.t_peak, "r_media_peak": float(np.interp(MEDIA_PEAK, d.t, d.r))}
 
 
 def to_points(u: np.ndarray) -> list[dict]:

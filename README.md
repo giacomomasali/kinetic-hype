@@ -52,7 +52,7 @@ that variant for comparison only.
 
 ```bash
 pip install -e ".[dev]"
-pytest                                   # 28 tests, about 40 s
+pytest                                   # 31 tests, about 40 s
 python scripts/run_experiments.py        # DSMC results for notebooks 3-4, about 30 min on 2 cores
 python scripts/make_paper_figures.py     # figures and numbers for the working paper (paper/figures/)
 python scripts/run_sensitivity.py        # global sensitivity analysis for notebook 5, 15-20 min on 2 cores
@@ -82,8 +82,8 @@ Signals are plain functions of time; `gaussian`, `rise_then_flat`, `linear`, `co
 4. `04_fixed_signals` — with constant media, the DSMC shows a hype cycle when relaxation is fast
    enough ($\mu_c\ge1000$ on the grid tested) but finite; the mean-field limit has no rising phase.
 5. `05_sensitivity` — global (Sobol) sensitivity analysis of the aggregate system over 11 parameters: which
-   factors decide whether expectations overshoot and whether the overshoot becomes a full cycle, and maps of
-   the cycle region around the paper's baseline.
+   factors decide whether expectations fall (a temporary dip below a later, higher level; an overshoot that
+   settles; or a full cycle), and maps of these regions around the paper's baseline.
 
 ## Limitations
 
@@ -99,7 +99,7 @@ Signals are plain functions of time; `gaussian`, `rise_then_flat`, `linear`, `co
   adopted.
 * Parameter values are illustrative and nothing is calibrated to data. The global sensitivity analysis
   (notebook 5) covers the aggregate system only, over ranges chosen by judgement. The default parameters lie inside the
-  region where hype cycles occur, but a performance ceiling above about 0.9 removes the cycle.
+  region where hype cycles occur; with the default message, a performance ceiling above about 1.0 removes any fall.
 
 ## Background
 

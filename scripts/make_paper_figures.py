@@ -183,30 +183,47 @@ def numbers_size(numbers):
     numbers["size"] = out
 
 
-PATTERN_COLOURS = ["#d9d9d6", "#eb6834", "#2a78d6"]
+PATTERN_COLOURS = ["#d9d9d6", "#eb6834", "#2a78d6"]          # no fall, fall without recovery, hype cycle
+ABOVE_COLOUR = "#9cc3ef"                                     # hype cycle that ends above its peak
+
+
+def _shares(ax, base, x, n_bins=14):
+    """Stacked shares of the four outcome classes in equal-count bins of x, joined at the bin medians."""
+    q = pd.qcut(x, n_bins)
+    g = base.groupby(q, observed=True)
+    mid = x.groupby(q, observed=True).median().to_numpy()
+    shares = [(g.pattern.apply(lambda v: (v == 0).mean()), PATTERN_COLOURS[0], sa.PATTERNS[0]),
+              (g.pattern.apply(lambda v: (v == 1).mean()), PATTERN_COLOURS[1], sa.PATTERNS[1]),
+              (g.cycle_below.mean(), PATTERN_COLOURS[2], "hype cycle, ends below its peak"),
+              (g.ends_above_peak.mean(), ABOVE_COLOUR, "hype cycle, ends above its peak")]
+    ax.stackplot(mid, *[v.to_numpy() for v, _, _ in shares], colors=[c for _, c, _ in shares],
+                 labels=[l for _, _, l in shares])
+    ax.set_xlim(mid[0], mid[-1]); ax.set_ylim(0, 1)
 
 
 def fig_global(numbers):
-    """Global sensitivity: pattern shares against w - r_inf, and the (media width, k1) map."""
+    """Global sensitivity: (a) pattern shares against w - r(t_mu), (b) against r_inf - r(t_mu), both
+    computed from the runs, and (c) the pattern on the (media width, k1) plane around the baseline."""
     runs = pd.read_csv(RES / "sensitivity_runs.csv.gz")
     idx = pd.read_csv(RES / "sensitivity_indices.csv")
     base = runs[runs.block.isin(["A", "B"])].copy()
     base["gap"] = base.w0 - base.r_inf
+    base["gap_peak"] = base.w0 - base.r_media_peak          # message minus performance at the media peak
+    base["to_come"] = base.r_inf - base.r_media_peak         # improvement still to come after the media peak
+    base["cycle_below"] = ((base.pattern == 2) & (base.ends_above_peak == 0)).astype(float)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.9))
-    q = pd.qcut(base.gap, 12)
-    tab = pd.crosstab(q, base.pattern, normalize="index").reindex(columns=[0, 1, 2], fill_value=0)
-    mid = base.groupby(q, observed=True).gap.median().to_numpy()
-    axes[0].stackplot(mid, tab[0], tab[1], tab[2], colors=PATTERN_COLOURS, labels=list(sa.PATTERNS.values()))
+    fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.6), gridspec_kw={"width_ratios": [1, 1, 1.1]})
+    _shares(axes[0], base, base.gap_peak)
     axes[0].axvline(0, color=INK, lw=0.8, ls=":")
-    axes[0].set_xlabel(r"media message minus performance ceiling, $w-r_\infty$")
-    axes[0].set_ylabel("share of runs"); axes[0].set_ylim(0, 1); axes[0].set_xlim(mid[0], mid[-1])
+    axes[0].set_xlabel(r"$w-r(t_\mu)$"); axes[0].set_ylabel("share of runs")
+    _shares(axes[1], base, base.to_come)
+    axes[1].set_xlabel(r"$r_\infty-r(t_\mu)$"); axes[1].set_yticklabels([])
 
     m = pd.read_csv(RES / "sensitivity_map_media_width2_k1.csv")
     xa, xb = np.sort(m.media_width2.unique()), np.sort(m.k1.unique())
     Z = m.pivot(index="k1", columns="media_width2", values="pattern").loc[xb, xa].to_numpy()
-    D = m.pivot(index="k1", columns="media_width2", values="drop").loc[xb, xa].to_numpy()
-    ax = axes[1]
+    D = m.pivot(index="k1", columns="media_width2", values="max_fall").loc[xb, xa].to_numpy()
+    ax = axes[2]
     ax.pcolormesh(xa, xb, Z, cmap=ListedColormap(PATTERN_COLOURS), vmin=-0.5, vmax=2.5, shading="nearest", rasterized=True)
     cs = ax.contour(xa, xb, D, levels=[0.05, 0.1, 0.15, 0.2, 0.25], colors=INK, linewidths=0.6)
     ax.clabel(cs, fontsize=6, fmt="%.2f")
@@ -214,24 +231,52 @@ def fig_global(numbers):
     ax.plot(sa.BASELINE["media_width2"], sa.BASELINE["k1"], "x", color=INK, ms=6, mew=1.0)
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.xaxis.set_minor_formatter(NullFormatter()); ax.yaxis.set_minor_formatter(NullFormatter())
-    ax.set_xlabel(r"media attention width $\sigma^2_\mu$"); ax.set_ylabel(r"investment weight on expectations $k_1$")
+    ax.set_xlabel(r"media width $\sigma^2_\mu$"); ax.set_ylabel(r"investment on expectations $k_1$")
+    for a_, lab in zip(axes, "abc"):
+        a_.set_title(f"({lab})", loc="left", fontsize=8)
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.06))
-    fig.tight_layout(rect=(0, 0.05, 1, 1)); save(fig, "fig_global")
+    fig.legend(h, l, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.04), fontsize=7)
+    fig.tight_layout(rect=(0, 0.07, 1, 1)); save(fig, "fig_global")
 
-    bins = [-1.0, 0.0, 0.2, 0.5, 1.0, 1.5]
-    gb = pd.cut(base.gap, bins)
-    over = base.groupby(gb, observed=True).any_overshoot.agg(["mean", "size"])
+    falls = base[base.pattern >= 1]
+    gp = base[base.gap_peak <= 0]
+    tc = pd.cut(falls.to_come, [0, 0.1, 0.2, 0.3, 1.0], include_lowest=True)
+    gq = pd.qcut(base.gap_peak, 14)
+    bins = [-1.0, -0.2, 0.0, 0.2, 0.5, 1.0, 1.5]
+    by_gap = base.groupby(pd.cut(base.gap, bins), observed=True).agg(
+        n=("pattern", "size"), any_fall=("any_fall", "mean"), cycle=("hype_cycle", "mean"),
+        cycle_above=("ends_above_peak", "mean"), fall_no_recovery=("pattern", lambda x: (x == 1).mean()))
     wq = pd.qcut(base.media_width2, 4)
+    lo, hi = base[base.gap <= 0], base[base.gap > 0]
+    cyc = base[base.pattern == 2]
     out = dict(
         n_points=int(len(base)), n_runs=int(len(runs)), failed=int(runs.pattern.isna().sum()),
-        pattern_share={sa.PATTERNS[k]: float(v) for k, v in base.pattern.value_counts(normalize=True).items()},
-        overshoot_by_gap={str(k): dict(share=float(r["mean"]), n=int(r["size"])) for k, r in over.iterrows()},
-        overshoot_when_gap_le_0=int(((base.gap <= 0) & (base.pattern >= 1)).sum()), n_gap_le_0=int((base.gap <= 0).sum()),
-        cycle_share_among_overshoot=float((base.pattern == 2).sum() / (base.pattern >= 1).sum()),
+        pattern_share={sa.PATTERNS[k]: float((base.pattern == k).mean()) for k in sa.PATTERNS},
+        cycle_ends_above_peak_share_of_all=float(base.ends_above_peak.mean()),
+        cycle_ends_above_peak_share_of_cycles=float(cyc.ends_above_peak.mean()),
+        by_gap={str(k): {c: (int(v) if c == "n" else float(v)) for c, v in r.items()} for k, r in by_gap.iterrows()},
+        n_gap_le_0=int(len(lo)), fall_when_gap_le_0=int(lo.any_fall.sum()),
+        cycle_when_gap_le_0=int(lo.hype_cycle.sum()), cycle_below_peak_when_gap_le_0=int(lo.cycle_below.sum()),
+        fall_no_recovery_when_gap_le_0=int((lo.pattern == 1).sum()),
+        n_gap_gt_0=int(len(hi)), cycle_above_peak_when_gap_gt_0=int(hi.ends_above_peak.sum()),
+        max_fall_of_cycles_above=dict(median=float(cyc[cyc.ends_above_peak == 1].max_fall.median()),
+                                      p90=float(cyc[cyc.ends_above_peak == 1].max_fall.quantile(0.9))),
+        max_fall_of_cycles_below=dict(median=float(cyc[cyc.ends_above_peak == 0].max_fall.median()),
+                                      p90=float(cyc[cyc.ends_above_peak == 0].max_fall.quantile(0.9))),
+        cycle_share_among_falls=float(base.hype_cycle.sum() / base.any_fall.sum()),
+        n_message_le_r_media_peak=int(len(gp)), falls_when_message_le_r_media_peak=int(gp.any_fall.sum()),
+        fall_share_by_gap_peak_bin_first_last=[float(v) for v in base.groupby(gq, observed=True).any_fall.mean().iloc[[0, -1]]],
+        fall_share_gap_peak_above_1=float(base[base.gap_peak > 1].any_fall.mean()),
+        fall_share_gap_peak_0_to_02=float(base[(base.gap_peak > 0) & (base.gap_peak <= 0.2)].any_fall.mean()),
+        cycle_share_of_falls_by_to_come={str(k): float(v) for k, v in falls.groupby(tc, observed=True).hype_cycle.mean().items()},
+        n_falls_by_to_come={str(k): int(v) for k, v in falls.groupby(tc, observed=True).size().items()},
+        above_share_of_cycles_by_to_come={str(k): float(v) for k, v in
+                                          base[base.pattern == 2].groupby(pd.cut(base[base.pattern == 2].to_come, [0, 0.1, 0.2, 0.3, 1.0], include_lowest=True), observed=True).ends_above_peak.mean().items()},
+        to_come_range=[float(base.to_come.min()), float(base.to_come.max())],
         cycle_share_by_media_width_quartile=[float(v) for v in base.groupby(wq, observed=True).hype_cycle.mean()],
         ST=idx.pivot(index="factor", columns="outcome", values="ST").round(3).to_dict(),
         S1=idx.pivot(index="factor", columns="outcome", values="S1").round(3).to_dict(),
+        ST_ci_halfwidth_max={o: float(((d.ST_hi - d.ST_lo) / 2).max()) for o, d in idx.groupby("outcome")},
     )
     # boundaries around the baseline, read from the maps
     mw = pd.read_csv(RES / "sensitivity_map_w0_r_inf.csv")
@@ -245,7 +290,8 @@ def fig_global(numbers):
     out["alpha2_min_without_cycle_at_baseline_r"] = float(sub[sub.pattern != 2].alpha2.min()) if (sub.pattern != 2).any() else None
     for w in (1.0, 1.5, 2.0):
         wv = mw.w0.unique()[np.argmin(np.abs(mw.w0.unique() - w))]
-        out[f"r_inf_max_with_overshoot_at_w_{w}"] = float(mw[(mw.w0 == wv) & (mw.pattern >= 1)].r_inf.max())
+        out[f"r_inf_max_with_fall_at_w_{w}"] = float(mw[(mw.w0 == wv) & (mw.pattern >= 1)].r_inf.max())
+        out[f"r_inf_max_with_cycle_at_w_{w}"] = float(mw[(mw.w0 == wv) & (mw.pattern == 2)].r_inf.max())
     numbers["global"] = out
 
 

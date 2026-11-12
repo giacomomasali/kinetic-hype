@@ -25,8 +25,9 @@ from kinetic_hype import sensitivity as sa
 
 OUT = Path(__file__).resolve().parent.parent / "results"
 MAP_PAIRS = (("w0", "r_inf"), ("alpha2", "r_inf"), ("media_width2", "k1"))
-INDICATORS = {"hype_cycle": "hype cycle (0/1)", "any_overshoot": "overshoot, with or without recovery (0/1)",
-              "drop": "peak minus trough of m1", "rho_T": "adoption at T = 30"}
+INDICATORS = {"any_fall": "fall of expectations by 0.02 or more, with or without recovery (0/1)",
+              "hype_cycle": "hype cycle (0/1)",
+              "max_fall": "largest fall of m1 from any peak", "rho_T": "adoption at T = 30"}
 
 
 def _eval(x):
@@ -49,7 +50,8 @@ def sobol(n, jobs, seed=0):
         df.insert(1, "row", np.arange(n))
         frames.append(df)
     runs = pd.concat(frames, ignore_index=True)
-    runs["any_overshoot"] = (runs["pattern"] >= 1).astype(float)
+    runs["any_fall"] = (runs["pattern"] >= 1).astype(float)
+    runs.loc[runs["pattern"].isna(), "any_fall"] = np.nan
     runs.to_csv(OUT / "sensitivity_runs.csv.gz", index=False)
 
     rows = []
