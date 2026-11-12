@@ -82,8 +82,8 @@ Signals are plain functions of time; `gaussian`, `rise_then_flat`, `linear`, `co
 4. `04_fixed_signals` — with constant media, the DSMC shows a hype cycle when relaxation is fast
    enough ($\mu_c\ge1000$ on the grid tested) but finite; the mean-field limit has no rising phase.
 5. `05_sensitivity` — global (Sobol) sensitivity analysis of the aggregate system over 11 parameters: which
-   factors decide whether expectations fall (a temporary dip below a later, higher level; an overshoot that
-   settles; or a full cycle), and maps of these regions around the paper's baseline.
+   factors decide whether expectations fall and whether the fall turns into a hype cycle (ending below or
+   above its peak), and maps of these regions around the paper's baseline.
 
 ## Limitations
 
